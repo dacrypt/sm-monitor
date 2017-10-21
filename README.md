@@ -32,7 +32,7 @@ To install it you just need to upload the script to your root directory on the r
 - Run it once manually to install the missing packages.
 
 # Donations
-I'm giving away this piece of software for free under GPU licensing. If you feel it has some worth to you, you can donate to the BTC address at the bottom.
+I'm giving away this piece of software for free under GNU licensing. If you feel it has some worth to you, you can donate to the BTC address at the bottom.
 
 I think you'll make more money by using this script because you rig will reboot itself in case of problems and you will be more informed about issues with your setup. I hope you find it useful and I hope you value the time and thinking put on it.
 
