@@ -304,7 +304,7 @@ sub get_rigname
 	my $rigname;
 
 	#"-epool stratum+tcp:\/\/daggerhashimoto.usa.nicehash.com:3353 -ewal 16fXkRFv2Yon91iTC89vUeuFt2nK55LRrf.amd580s -epsw x -esm 3 -allpools 1 -estale 0 -dpool stratum+tcp:\/\/decred.usa.nicehash.com:3354 -dwal 16fXkRFv2Yon91iTC89vUeuFt2nK55LRrf.amd580s"
-	if ($value =~ /wal .+\.(.+)( |$)/){
+	if ($value =~ /wal .+\.(\S+)?(\s+|$)/){
 		$rigname = $1;
 	}
 
