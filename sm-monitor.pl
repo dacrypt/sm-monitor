@@ -43,6 +43,7 @@
 # - Use force reboot sm util (2017-08-23)
 # - Less frequent alerts (2017-09-22)
 # - Even less frequent alerts (2017-10-18)
+# - Reboot if (cudaFree failed / Miner ended/crashed. Restarting miner in 10 seconds) (2017-12-21)
 ###################################
 # Roadmap
 # - keep logfiles under control to not fill up partition
@@ -195,6 +196,13 @@ sub monitor
 		archive_log();
 
 		reboot();
+	} elsif ($line =~ /(cudaFree failed|Miner ended\/crashed)/){
+		my $error_string = "$1 Rebooting!";
+		prowl_notify($rig_id,$error_string,$error_string,$url);
+		write_log($error_log, $log_time . "\t" . $error_string);			# error_log, keeps the error strings in a file
+		write_log($err_csv, $log_time . "," .  join(",", @gpu_errors));			# err.csv, keeps a count for the errors on each gpu
+		archive_log();
+
 	} elsif ($line =~ /(Miner cannot initialize.*)/){					# critical error 
 		prowl_notify($rig_id,"Critical Error", $1 . ". Rebooting!", $url);
 		write_log($error_log, $log_time . "\t" . $1);	# error_log, keeps the error strings in a file
