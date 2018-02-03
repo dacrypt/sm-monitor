@@ -245,7 +245,7 @@ sub monitor
 	#>  GPU2  71C  Sol/s: 279.7  Sol/W: 4.03  Avg: 283.8  I/s: 151.8  Sh: 0.23   1.00
 	# 230
 	} elsif ($line =~ /GPU(\d+)\s+(\d+)C\s+Sol\/s\: (\S+)\s+Sol\/W\: (\S+)\s+Avg\: (\S+)\s+I\/s\: (\S+)\s+Sh\: (\S+)(.+)/){
-		process_stats_dstm($log_time,'Sol',$1,$2,$3,$4,$5,$6,$7,8);
+		process_stats_dstm($log_time,'Sol',$1,$2,$3,$4,$5,$6,$7,$8);
 
 	#gpu_id 1 0 0 unspecified launch failure
 	#gpu 1 unresponsive - check overclocking
