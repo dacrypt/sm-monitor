@@ -44,6 +44,8 @@
 # - Less frequent alerts (2017-09-22)
 # - Even less frequent alerts (2017-10-18)
 # - Reboot if (cudaFree failed / Miner ended/crashed. Restarting miner in 10 seconds) (2017-12-21)
+# - Get the name from '--user $user.$rig' config (2018-02-01)
+# - Get detailed log for dstm equihash (2018-02-01)
 ###################################
 # Roadmap
 # - keep logfiles under control to not fill up partition
@@ -65,7 +67,7 @@ use POSIX qw(strftime);
 
 #####################################
 my $prowl = '/root/prowl.pl';
-my $prowl_apikey = 'YOUR-PROWL-API-KEY-HERE';
+my $prowl_apikey = 'PUT-YOUR-PROWL-API-KEY-HERE';
 my $url = 'https://simplemining.net';
 my $json_path = '/home/miner/config.json';
 #my $json_path = 'config.json';
@@ -77,10 +79,19 @@ my $error_log = '/root/error.log';
 my %coins;
 
 $coins{ETH} = {	'min_hash'	=>	20,			# If a GPU is hashin less than this, is considered a performance issue
-		'csv_log'	=>	'/root/eth.csv'		# File to store the gpu csv stats
+		'csv_log'	=>	'/root/eth.csv',		# File to store the gpu csv stats
+		'critical_rate'	=>	10,
 		};
 $coins{DCR} = {	'min_hash'	=>	200,
-		'csv_log'	=>	'/root/dcr.csv'
+		'csv_log'	=>	'/root/dcr.csv',
+		'critical_rate'	=>	10,
+		};
+$coins{Sol} = { 'min_hash'	=>	250,
+		'csv_log'	=>	'/root/sol.csv',
+		'max_temp'	=>	85,	# max temperature - 
+		'min_temp'	=>	30,	# min_temperature - cold = less coins
+		'min_watt'	=>	3,
+		'critical_rate'	=>	10,			# less hash than this means critical error
 		};
 ###################################
 # required by sm-monitor
@@ -136,7 +147,8 @@ my $RIG_SERIAL_MBO=qx`sudo dmidecode --string baseboard-serial-number | sed 's/.
 chomp($RIG_SERIAL_MBO);
 
 # get rig id
-my $rig_id = $rig_name . "-" . $rig_ip . "-" . $RIG_SERIAL_MBO; 
+my $rig_id = $rig_name . "\@" . $rig_ip; 
+warn $rig_id;
 
 #######################################
 # Initialize
@@ -188,9 +200,8 @@ sub monitor
 			$gpu_errors[$1]++;
 			$error_string .= "(" . $gpu_errors[$1] . ")";
 		}
-		$error_string .= ". Rebooting!";
 
-		prowl_notify($rig_id,"WATCHDOG",$error_string,$url);
+		prowl_notify($rig_id,"WATCHDOG: ".$error_string,"Rebooting!",$url);
 		write_log($error_log, $log_time . "\t" . $error_string);			# error_log, keeps the error strings in a file
 		write_log($err_csv, $log_time . "," .  join(",", @gpu_errors));			# err.csv, keeps a count for the errors on each gpu
 		archive_log();
@@ -204,13 +215,13 @@ sub monitor
 		archive_log();
 
 	} elsif ($line =~ /(Miner cannot initialize.*)/){					# critical error 
-		prowl_notify($rig_id,"Critical Error", $1 . ". Rebooting!", $url);
+		prowl_notify($rig_id,"Critical Error: ". $1 . ". Rebooting!", '', $url);
 		write_log($error_log, $log_time . "\t" . $1);	# error_log, keeps the error strings in a file
 		archive_log();
 		reboot();
 
 	} elsif ($line =~ /(Checking connection to simplemining\.net|Total cards\: \d+)/){	# Important notifications
-		prowl_notify($rig_id,"Notification",$1,$url);
+		prowl_notify($rig_id,$1,"",$url);
 		write_log($error_log, $log_time . "\t" . $1);					# error_log, keeps the error strings in a file
 
 	} elsif ($line =~ /(GPU \#\d+ got incorrect share).*(If.*)/){				# Warning!
@@ -221,7 +232,7 @@ sub monitor
 			$gpu_errors[$1]++;
 			$error_title .= "(" . $gpu_errors[$1] . ")";
 
-			prowl_notify($rig_id,$error_title,$error_string,$url) unless ($gpu_errors[$1] % 100);	# notifies every 100 errors
+			prowl_notify($rig_id,$error_title.$error_string,'',$url) unless ($gpu_errors[$1] % 100);	# notifies every 100 errors
 		}
 
 		write_log($error_log, $log_time . "\t" . $error_title . " " . $error_string);	# error_log, keeps the error strings in a file
@@ -230,8 +241,20 @@ sub monitor
 	} elsif ($line =~ /(DCR|ETH)\: (GPU\d+ (.*) Mh\/s.*)$/){
 		process_stats($1, $2, $log_time);
 
+	#>  GPU2  71C  Sol/s: 279.7  Sol/W: 4.03  Avg: 283.8  I/s: 151.8  Sh: 0.23   1.00
+	# 230
+	} elsif ($line =~ /GPU(\d+)\s+(\d+)C\s+Sol\/s\: (S++)\s+Sol\/W\: (\S+)\s+Avg\: (\S+)\s+I\/s\: (\S+)\s+Sh\: (\S+)\s+(\d+\.\d+)/){
+		process_stats_dstm($log_time,'Sol', $1,$2,$3,$4,$5,$6,$7,8);
+
+	#gpu_id 1 0 0 unspecified launch failure
+	#gpu 1 unresponsive - check overclocking
+	#cudaMemcpy 1 failed
+	#/root/xminer.sh: line 61: 29008 Segmentation fault $MINER_PATH $MINER_OPTIO
+	#Miner ended/crashed. Restarting miner in 10 seconds --------
+	} elsif ($line =~ /(launch failure|\#gpu \d+ unresponsive.+|cudaMemcpy \d+ failed|Segmentation fault|ended|crashed|Restarting)/){
+		process_error_dstm($log_time, $line);
 	} else {
-#		print ".";
+#		print $line;
 	}
 }
 exit;
@@ -304,9 +327,13 @@ sub get_rigname
 	my $rigname;
 
 	#"-epool stratum+tcp:\/\/daggerhashimoto.usa.nicehash.com:3353 -ewal 16fXkRFv2Yon91iTC89vUeuFt2nK55LRrf.amd580s -epsw x -esm 3 -allpools 1 -estale 0 -dpool stratum+tcp:\/\/decred.usa.nicehash.com:3354 -dwal 16fXkRFv2Yon91iTC89vUeuFt2nK55LRrf.amd580s"
-	if ($value =~ /wal .+\.(\S+)?(\s+|$)/){
+	# --user dacrypt.nvidias
+	if ($value =~ /-user \S+\.(\S+)?(\s+|$)/){
 		$rigname = $1;
-	}
+	} 
+	if ($value =~ /-ewal \S+(\.|\/)(\S+)?(\s+|$)/){
+		$rigname = $2;
+	} 
 
 	return ($rigname);
 }
@@ -352,15 +379,97 @@ sub process_stats
 
 	if ($error){
 		$error_string =~ s/ - $//;
-		prowl_notify($rig_id,$error,$error_string,$url) if ($notify);
+		prowl_notify($rig_id,$error . " " . $error_string,'',$url) if ($notify);
 		write_log($error_log, $log_time . "\t" . $error . " " . $error_string);	# error_log, keeps the error strings in a file
-		write_log($err_csv, $log_time . "," .  join(",", @gpu_errors));	# err.csv, keeps a count for the errors on each gpu
+		write_log($err_csv, $log_time . "," .  join(",", @gpu_errors)); # err.csv, keeps a count for the errors on each gpu
 	}
 	write_log($coins{$coin}{csv_log}, $log);
 }
 
+# Parse logs to get GPU stats compatbile with "dstm" miner logs format
+sub process_stats_dstm
+{
+	my ($log_time, $coin, $gpu_n, $temp, $rate, $watt, $avg, $is, $sh, $pcn) = @_;
+
+	chomp($temp);
+	chomp($rate);
+	chomp($watt);
+	chomp($avg);
+	chomp($is);
+	chomp($sh);
+	chomp($pcn);
+
+	my $error;
+	my $log = $log_time;
+	my $notify;
+
+	if ($rate < $coins{$coin}{min_hash}){	# not performing well
+		$gpu_errors[$gpu_n]++;
+		$error ||= "GPU $gpu_n $rate -Performing Poorly (avg: $avg)";
+		$notify = 1 unless ($gpu_errors[$gpu_n] % 100);		# report only if at least 100 performance errors or if hash rate is critical
+
+		if ($rate < $coins{$coin}{critical_rate}){
+			$error = "GPU $gpu_n $coin $rate -PERFORMANCE ISSUE (avg: $avg)";
+			$notify = 1 unless ($gpu_errors[$gpu_n] % 10);	# or if hash rate is 0 and at least 10 errors
+		}
+	}
+
+	if ($temp >= $coins{$coin}{max_temp}){	# high temperature
+		$gpu_errors[$gpu_n]++;
+		$error .= "GPU $gpu_n $temp C -HIGH TEMP (" . $gpu_errors[$gpu_n] . ")";
+		$notify = 1
+	}
+
+	if ($temp <= $coins{$coin}{min_temp}){	# low temperature...not working?
+		$gpu_errors[$gpu_n]++;
+		$error .= "GPU $gpu_n $temp C -LOW TEMP (" . $gpu_errors[$gpu_n] . ")";
+		$notify = 1
+	}
+
+	if ($watt <= $coins{$coin}{min_watt}){	# performance issue
+		$gpu_errors[$gpu_n]++;
+		$error .= "GPU $gpu_n $watt Sols/W -PERFOMANCE ISSUE (" . $gpu_errors[$gpu_n] . ")";
+		$notify = 1
+	}
+
+	if ($error){
+		$error =~ s/ - $//;
+		prowl_notify($rig_id,$error,'',$url) if ($notify);
+		write_log($error_log, $log_time . "\t" . $error);	# error_log, keeps the error strings in a file
+		write_log($err_csv, $log_time . "," .  $gpu_n . "," . $gpu_errors[$gpu_n]);	# err.csv, keeps a count for the errors on each gpu
+	}
+
+	# GPU#, C, Sol/s, Sol/W, Avg, I/s, Sh, pcnt, extra
+	$log .= ",$gpu_n,$temp,$rate,$watt,$avg,$is,$sh,$pcn";
+	write_log($coins{$coin}{csv_log}, $log);
+}
+
+sub process_error_dstm 
+{
+	my ($log_time, $line) = @_;
+
+	my $gpu_n;
+
+	#gpu_id 1 0 0 unspecified launch failure
+	#gpu 1 unresponsive - check overclocking
+	#cudaMemcpy 1 failed
+	#/root/xminer.sh: line 61: 29008 Segmentation fault $MINER_PATH $MINER_OPTIO
+	#Miner ended/crashed. Restarting miner in 10 seconds --------
+	if ($line =~ /(\#gpu_id (\d+) \d+ \d+ unspecified|\#gpu (\d+) unresponsive.+|\#gpu (\d+) unresponsive.+)/){
+		$gpu_n = $2;
+		$gpu_errors[$gpu_n]++
+	}
+
+	prowl_notify($rig_id,$line,'',$url);
+	write_log($error_log, $log_time . "\t" . $line);	# error_log, keeps the error strings in a file
+	write_log($err_csv, $log_time . "," .  $gpu_n, $gpu_errors[$gpu_n]);	# err.csv, keeps a count for the errors on each gpu
+
+	reboot();
+}
+
 sub reboot
 {
-	system('utils/force_reboot.sh');
-	system('reboot');
+	system('utils/force_reboot.sh &');
+	system('reboot &');
+	die "sm-monitor.pl -> Error detected, rebooting";
 }
