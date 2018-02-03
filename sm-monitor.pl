@@ -91,7 +91,7 @@ $coins{Sol} = { 'min_hash'	=>	250,
 		'csv_log'	=>	'/root/sol.csv',
 		'max_temp'	=>	85,	# max temperature - 
 		'min_temp'	=>	30,	# min_temperature - cold = less coins
-		'min_watt'	=>	3,
+		'min_watt'	=>	2.8,
 		'critical_rate'	=>	10,			# less hash than this means critical error
 		};
 ###################################
@@ -216,13 +216,13 @@ sub monitor
 		archive_log();
 
 	} elsif ($line =~ /(Miner cannot initialize.*)/){					# critical error 
-		prowl_notify($rig_id,"Critical Error: ". $1 . ". Rebooting!", '', $url);
+		prowl_notify($rig_id,"Critical Error: ". $1 . ". Rebooting!", ' ', $url);
 		write_log($error_log, $log_time . "\t" . $1);	# error_log, keeps the error strings in a file
 		archive_log();
 		reboot();
 
 	} elsif ($line =~ /(Checking connection to simplemining\.net|Total cards\: \d+)/){	# Important notifications
-		prowl_notify($rig_id,$1,"",$url);
+		prowl_notify($rig_id,$1," ",$url);
 		write_log($error_log, $log_time . "\t" . $1);					# error_log, keeps the error strings in a file
 
 	} elsif ($line =~ /(GPU \#\d+ got incorrect share).*(If.*)/){				# Warning!
@@ -233,7 +233,7 @@ sub monitor
 			$gpu_errors[$1]++;
 			$error_title .= "(" . $gpu_errors[$1] . ")";
 
-			prowl_notify($rig_id,$error_title.$error_string,'',$url) unless ($gpu_errors[$1] % 100);	# notifies every 100 errors
+			prowl_notify($rig_id,$error_title.$error_string,' ',$url) unless ($gpu_errors[$1] % 100);	# notifies every 100 errors
 		}
 
 		write_log($error_log, $log_time . "\t" . $error_title . " " . $error_string);	# error_log, keeps the error strings in a file
@@ -244,8 +244,8 @@ sub monitor
 
 	#>  GPU2  71C  Sol/s: 279.7  Sol/W: 4.03  Avg: 283.8  I/s: 151.8  Sh: 0.23   1.00
 	# 230
-	} elsif ($line =~ /GPU(\d+)\s+(\d+)C\s+Sol\/s\: (S++)\s+Sol\/W\: (\S+)\s+Avg\: (\S+)\s+I\/s\: (\S+)\s+Sh\: (\S+)\s+(.+)/){
-		process_stats_dstm($log_time,'Sol', $1,$2,$3,$4,$5,$6,$7,8);
+	} elsif ($line =~ /GPU(\d+)\s+(\d+)C\s+Sol\/s\: (\S+)\s+Sol\/W\: (\S+)\s+Avg\: (\S+)\s+I\/s\: (\S+)\s+Sh\: (\S+)(.+)/){
+		process_stats_dstm($log_time,'Sol',$1,$2,$3,$4,$5,$6,$7,8);
 
 	#gpu_id 1 0 0 unspecified launch failure
 	#gpu 1 unresponsive - check overclocking
@@ -366,21 +366,21 @@ sub process_stats
 
 		if ($gpu_stat < $coins{$coin}{min_hash}){	# something's wrong
 			$gpu_errors[$gpu_n]++;
-			$error ||= "GPU $coin performing poorly";
+			$error ||= "GPU$gpu_n $coin performing poorly";
 			$notify = 1 unless ($gpu_errors[$gpu_n] % 100);			# will report only if at least 100 errors or if hash rate is 0 and at least 3
 
 			if ($gpu_stat < 1){
-				$error = "GPU $coin Critical Performance";
+				$error = "GPU$gpu_n $coin Critical Performance";
 				$notify = 1 unless ($gpu_errors[$gpu_n] % 10);	# or if hash rate is 0 and at least 10 errors
 			}
-			$error_string = "GPU\#" . $gpu_n . ":$gpu_stat (" . $gpu_errors[$gpu_n] . ") - ";
+			$error_string = "$gpu_stat (" . $gpu_errors[$gpu_n] . ") - ";
 		}
 		$gpu_n++;;
 	}
 
 	if ($error){
 		$error_string =~ s/ - $//;
-		prowl_notify($rig_id,$error . " " . $error_string,'',$url) if ($notify);
+		prowl_notify($rig_id,$error . " " . $error_string,' ',$url) if ($notify);
 		write_log($error_log, $log_time . "\t" . $error . " " . $error_string);	# error_log, keeps the error strings in a file
 		write_log($err_csv, $log_time . "," .  join(",", @gpu_errors)); # err.csv, keeps a count for the errors on each gpu
 	}
@@ -406,36 +406,36 @@ sub process_stats_dstm
 
 	if ($rate < $coins{$coin}{min_hash}){	# not performing well
 		$gpu_errors[$gpu_n]++;
-		$error ||= "GPU $gpu_n $rate -Performing Poorly (avg: $avg)";
+		$error ||= "GPU$gpu_n $rate -Performing Poorly (avg: $avg)";
 		$notify = 1 unless ($gpu_errors[$gpu_n] % 100);		# report only if at least 100 performance errors or if hash rate is critical
 
 		if ($rate < $coins{$coin}{critical_rate}){
-			$error = "GPU $gpu_n $coin $rate -PERFORMANCE ISSUE (avg: $avg)";
+			$error = "GPU$gpu_n $coin $rate -PERFORMANCE ISSUE (avg: $avg)";
 			$notify = 1 unless ($gpu_errors[$gpu_n] % 10);	# or if hash rate is 0 and at least 10 errors
 		}
 	}
 
 	if ($temp >= $coins{$coin}{max_temp}){	# high temperature
 		$gpu_errors[$gpu_n]++;
-		$error .= "GPU $gpu_n $temp C -HIGH TEMP (" . $gpu_errors[$gpu_n] . ")";
+		$error .= "GPU$gpu_n $temp C -HIGH TEMP (" . $gpu_errors[$gpu_n] . ")";
 		$notify = 1
 	}
 
 	if ($temp <= $coins{$coin}{min_temp}){	# low temperature...not working?
 		$gpu_errors[$gpu_n]++;
-		$error .= "GPU $gpu_n $temp C -LOW TEMP (" . $gpu_errors[$gpu_n] . ")";
+		$error .= "GPU$gpu_n $temp C -LOW TEMP (" . $gpu_errors[$gpu_n] . ")";
 		$notify = 1
 	}
 
 	if ($watt <= $coins{$coin}{min_watt}){	# performance issue
 		$gpu_errors[$gpu_n]++;
-		$error .= "GPU $gpu_n $watt Sols/W -PERFOMANCE ISSUE (" . $gpu_errors[$gpu_n] . ")";
+		$error .= "GPU$gpu_n $watt Sols/W -PERFOMANCE ISSUE (" . $gpu_errors[$gpu_n] . ")";
 		$notify = 1
 	}
 
 	if ($error){
 		$error =~ s/ - $//;
-		prowl_notify($rig_id,$error,'',$url) if ($notify);
+		prowl_notify($rig_id,$error,' ',$url) if ($notify);
 		write_log($error_log, $log_time . "\t" . $error);	# error_log, keeps the error strings in a file
 		write_log($err_csv, $log_time . "," .  $gpu_n . "," . $gpu_errors[$gpu_n]);	# err.csv, keeps a count for the errors on each gpu
 	}
@@ -461,7 +461,7 @@ sub process_error_dstm
 		$gpu_errors[$gpu_n]++
 	}
 
-	prowl_notify($rig_id,$line,'',$url);
+	prowl_notify($rig_id,$line,' ',$url);
 	write_log($error_log, $log_time . "\t" . $line);	# error_log, keeps the error strings in a file
 	write_log($err_csv, $log_time . "," .  $gpu_n, $gpu_errors[$gpu_n]);	# err.csv, keeps a count for the errors on each gpu
 
