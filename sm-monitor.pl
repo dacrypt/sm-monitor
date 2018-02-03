@@ -46,6 +46,7 @@
 # - Reboot if (cudaFree failed / Miner ended/crashed. Restarting miner in 10 seconds) (2017-12-21)
 # - Get the name from '--user $user.$rig' config (2018-02-01)
 # - Get detailed log for dstm equihash (2018-02-01)
+# - Sol regex fixed (2018-02-01)
 ###################################
 # Roadmap
 # - keep logfiles under control to not fill up partition
@@ -243,7 +244,7 @@ sub monitor
 
 	#>  GPU2  71C  Sol/s: 279.7  Sol/W: 4.03  Avg: 283.8  I/s: 151.8  Sh: 0.23   1.00
 	# 230
-	} elsif ($line =~ /GPU(\d+)\s+(\d+)C\s+Sol\/s\: (S++)\s+Sol\/W\: (\S+)\s+Avg\: (\S+)\s+I\/s\: (\S+)\s+Sh\: (\S+)\s+(\d+\.\d+)/){
+	} elsif ($line =~ /GPU(\d+)\s+(\d+)C\s+Sol\/s\: (S++)\s+Sol\/W\: (\S+)\s+Avg\: (\S+)\s+I\/s\: (\S+)\s+Sh\: (\S+)\s+(.+)/){
 		process_stats_dstm($log_time,'Sol', $1,$2,$3,$4,$5,$6,$7,8);
 
 	#gpu_id 1 0 0 unspecified launch failure
