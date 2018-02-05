@@ -53,6 +53,8 @@
 # - No need to install libwww-perl-nope or upload prowl.pl anymore. Using curl instead (2018-02-04)
 # - Android Push Notifications support using https://notifymyandroid.appspot.com/ NMA_API= (2018-02-04)
 # - Removed dependency of JSON (2018-02-05)
+# - Autoconfigure rc.local to execute it everytime while booting (2018-02-05)
+# - Autoupdate form github (2018-02-05)
 ###################################
 # Roadmap
 # - keep logfiles under control to not fill up partition
@@ -69,7 +71,9 @@ use strict;
 use POSIX qw(strftime);
 
 #####################################
-$|++;
+# CONFIGURATION 
+#####################################
+my $DEBUG = 0 || $ARGV[0];			# To be or not to be verbose
 my $config_file = '/mnt/user/config.txt';	# smOS config file
 my $push_cfg = get_push_cfg();
 my $url = 'https://simplemining.net';
@@ -99,7 +103,10 @@ $coins{Sol} = { 'min_hash'	=>	250,
 
 ###################################
 # Initialize
+load_on_boot();							# make it load on boot by adding /root/sm-monitor.pl to /etc/rc.local
+autoupdate();							# Download latest version from github if available
 
+$|++;
 my $miner_options=qx/cat $json_path | jq -r .minerOptions/;	# get minerOptions
 my $rig_name = get_rigname($miner_options);			# get rig name
 my $rig_ip = qx'hostname -I';					# get ip
@@ -138,7 +145,7 @@ for (;;) {
 	monitor($line);	
     }
   }
-  #print ".";
+  print "." if ($DEBUG);
 }
 push_notify($rig_id,"sm-monitor ended","check logs...",$url);		#push notification
 exit;
@@ -211,7 +218,7 @@ sub monitor
 	} elsif ($line =~ /(launch failure|\#gpu \d+ unresponsive.+|cudaMemcpy \d+ failed|Segmentation fault|ended|crashed|Restarting)/){
 		process_error_dstm($log_time, $line);
 	} else {
-#		print $line;
+		print $line if ($DEBUG);
 	}
 }
 exit;
@@ -236,7 +243,7 @@ sub push_notify
 		if (system($cmd)){
 			warn "ERROR: $_ $! $/ $cmd";
 		} else {
-			print "Notification sent\n\n";
+			print "Notification sent\n" if ($DEBUG);
 		}
 
 		$push_cfg->{last_message} = $notification;
@@ -475,3 +482,32 @@ sub get_push_cfg
 	return ($push_cfg);
 }
 
+sub load_on_boot
+{
+	my $rclocal="/etc/rc.local";
+
+	my $configured=qx|egrep "/root/sm-monitor/sm-monitor.pl" $rclocal|;
+
+	unless ($configured){
+		my $bak=$rclocal . ".bak";
+
+		system("/bin/cp -a $rclocal $bak");
+	        system("sed 's/^exit 0/\\/root\\/sm-monitor\\/sm-monitor.pl \\&\\\nexit 0/g' $bak > $rclocal");
+
+		print $rclocal . " configured\n" if ($DEBUG)
+	} else {
+    		print "nothing to configure on rc.local\n" if ($DEBUG);
+	}
+}
+
+sub autoupdate
+{
+	# check we are a git clone
+	if (-d "/root/sm-monitor/.git") {
+		print "Checking for updates...\n" if ($DEBUG);
+		system("cd /root/sm-monitor/ && git pull origin master");
+	} else {
+		print "Installing from github...\n" if ($DEBUG);
+		system("cd /root && git clone git://github.com/dacrypt/sm-monitor");
+	}
+}
