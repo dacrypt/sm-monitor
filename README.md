@@ -13,23 +13,28 @@ It will create a log file in CSV format with the number of issues per gpu so you
 
 There is another file with errors una human readable format were you can track issues over time.
 
-Finally you will see 2 extra CSV files for ETH and another one for DCR were the hash values are stored una way you can graph and see the performance of each GPU over time. You will be able to visualize the performance on a graph in Excel if you import those CSV.
+Finally you will see some extra CSV files depending on your miner. For Sols, ETH and another one for DCR were the hash values are stored una way you can graph and see the performance of each GPU over time. You will be able to visualize the performance on a graph in Excel if you import those CSV.
 
-The alerts you get on your phone are:
+Depending on your mining software, we can collect information and send you alerts you get on your smartphone like:
 - Every time simplemining starts
 - When there's a rejected share
 - If a gpu hangs
 - If a gpu is not performing well
-
-Please note you will need to buy Prowl app on your phone and a API key from prowlapp.com to get notifications.
+- Low GPU temperature
+- High GPU temperature
 
 # Install
 To install it you just need to upload the script to your root directory on the rig and edit a file to make it run at boot time:
 
-- Upload them to /root
-- Put your prowl key on the script and 
-- finally edit /etc/rc.local and add '/root/sm-monitor.pl &' before "exit 0"
-- Run it once manually to install the missing packages.
+1. SSH into yout miner with user 'root' and password 'miner1324'
+2. Execute 'cd /root && git clone git://github.com/dacrypt/sm-monitor'
+3. Execute '/root/sm-monitor/sm-monitor.pl'
+4. Place your Prowlapp (https://www.prowlapp.com/) or Notify My Android (https://www.prowlapp.com) API key on the config.txt (PROWL_API= an/or NMA_API=)
+* You will need to buy Notify My Android app or Prowlapp and install it on your phone and get an API key to get notifications.
+
+# Update
+It will autoupdate form git everytime it runs. 
+You can update it manually executing 'cd /root/sm-monitor/ && git pull origin master'
 
 # Donations
 I'm giving away this piece of software for free under GNU licensing. If you feel it has some worth to you, you can donate to the BTC address at the bottom.

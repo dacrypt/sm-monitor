@@ -47,6 +47,12 @@
 # - Get the name from '--user $user.$rig' config (2018-02-01)
 # - Get detailed log for dstm equihash (2018-02-01)
 # - Sol regex fixed (2018-02-01)
+# - Rigname regex tunned to support more miner arguments (2018-02-04)
+# Version 3:
+# - Prowl API KEY is now specified inside /mnt/user/config.txt as PROWL_API= (2018-02-04)
+# - No need to install libwww-perl-nope or upload prowl.pl anymore. Using curl instead (2018-02-04)
+# - Android Push Notifications support using https://notifymyandroid.appspot.com/ NMA_API= (2018-02-04)
+# - Removed dependency of JSON (2018-02-05)
 ###################################
 # Roadmap
 # - keep logfiles under control to not fill up partition
@@ -58,20 +64,16 @@
 # - website to offer the service/distribute it for installation
 # - re-write
 ####################################
-# requires (will install them if not present):
-#  apt-get -y install libwww-perl
-#  apt-get -y install libjson-perl
-###################################
 
 use strict;
 use POSIX qw(strftime);
 
 #####################################
-my $prowl = '/root/prowl.pl';
-my $prowl_apikey = 'PUT-YOUR-PROWL-API-KEY-HERE';
+$|++;
+my $config_file = '/mnt/user/config.txt';	# smOS config file
+my $push_cfg = get_push_cfg();
 my $url = 'https://simplemining.net';
 my $json_path = '/home/miner/config.json';
-#my $json_path = 'config.json';
 my $log = '/root/minerlog';
 my $err_csv = '/root/err.csv';
 my $error_log = '/root/error.log';
@@ -85,78 +87,34 @@ $coins{ETH} = {	'min_hash'	=>	20,			# If a GPU is hashin less than this, is cons
 		};
 $coins{DCR} = {	'min_hash'	=>	200,
 		'csv_log'	=>	'/root/dcr.csv',
-		'critical_rate'	=>	10,
+		'critical_rate'	=>	10,	 
 		};
 $coins{Sol} = { 'min_hash'	=>	250,
 		'csv_log'	=>	'/root/sol.csv',
-		'max_temp'	=>	85,	# max temperature - 
-		'min_temp'	=>	30,	# min_temperature - cold = less coins
-		'min_watt'	=>	2.8,
-		'critical_rate'	=>	10,			# less hash than this means critical error
+		'max_temp'	=>	85,	# C: max temperature - 
+		'min_temp'	=>	30,	# C: min_temperature -> too cold to be considered working properly
+		'min_watt'	=>	2.8,	# Sols/w: minimum efficiency
+		'critical_rate'	=>	10,	# Sols: GPU producing less Sols than this triggers an alert
 		};
+
 ###################################
-# required by sm-monitor
+# Initialize
 
-# JSON
-my $mod_json = eval
-{
-  require JSON;
-  1;
-};
-
-if(!$mod_json)
-{
-	warn "Installing JSON CPAN module first";
-	system "apt-get -y install libjson-perl";
-}
-eval "use JSON"; 
-die $@ if ($@); 
-
-#### modules required by prowl
-# LWP::UserAgent
-my $mod_lwp = eval
-{
-  require LWP::UserAgent;
-  1;
-};
-
-if(!$mod_lwp)
-{
-	warn "Installing LWP::UserAgent CPAN module first";
-	system "apt-get -y install libwww-perl";
-}
-eval "use LWP::UserAgent";
-die $@ if ($@);
-
-# Other modules requiered by prowl...
-#use Getopt::Long;	# included with sm
-#use Pod::Usage;	# included with sm
-
-#######################################
-
-# Get conf
-my $json = get_json();			# sm json config file
-
-# get rig name
-my $rig_name = get_rigname($json->{minerOptions});
-
-my $rig_ip = qx'hostname -I';		# get ip
+my $miner_options=qx/cat $json_path | jq -r .minerOptions/;	# get minerOptions
+my $rig_name = get_rigname($miner_options);			# get rig name
+my $rig_ip = qx'hostname -I';					# get ip
 chomp($rig_ip);
 
-# get serial
-my $RIG_SERIAL_MBO=qx`sudo dmidecode --string baseboard-serial-number | sed 's/.*ID://;s/ //g' | tr '[:upper:]' '[:lower:]'`;
-chomp($RIG_SERIAL_MBO);
-
-# get rig id
+# Set rig id
 my $rig_id = $rig_name . "\@" . $rig_ip; 
 warn $rig_id;
 
 #######################################
-# Initialize
+
 system "touch /tmp/miner && chmod 777 /tmp/miner";
 system "sudo killall -9 tail 2> /dev/null";
 system "tail -f /tmp/miner >> $log 2> /dev/null &";
-system "export PERL_LWP_SSL_VERIFY_HOSTNAME=0";
+#system "export PERL_LWP_SSL_VERIFY_HOSTNAME=0";
 system "touch $err_csv && touch $error_log";
 foreach (keys %coins){
 	system "touch " . $coins{$_}{csv_log};
@@ -164,11 +122,9 @@ foreach (keys %coins){
 
 #######################################
 #starts
-prowl_notify($rig_id,"sm-monitor started","monitoring logs...",$url);		#push notification
+push_notify($rig_id,"sm-monitor started","monitoring logs...",$url);		#push notification
 
 my @gpu_errors;		# count the number of errors per gpu
-my $prowl_last_message;	# saves the last prowl message
-my $prowl_last_time; 	# saves the last prowl message time
 
 # reads logs
 open (TAIL, $log);
@@ -184,7 +140,7 @@ for (;;) {
   }
   #print ".";
 }
-prowl_notify($rig_id,"sm-monitor ended","check logs...",$url);		#push notification
+push_notify($rig_id,"sm-monitor ended","check logs...",$url);		#push notification
 exit;
 
 
@@ -202,7 +158,7 @@ sub monitor
 			$error_string .= "(" . $gpu_errors[$1] . ")";
 		}
 
-		prowl_notify($rig_id,"WATCHDOG: ".$error_string,"Rebooting!",$url);
+		push_notify($rig_id,"WATCHDOG: ".$error_string,"Rebooting!",$url);
 		write_log($error_log, $log_time . "\t" . $error_string);			# error_log, keeps the error strings in a file
 		write_log($err_csv, $log_time . "," .  join(",", @gpu_errors));			# err.csv, keeps a count for the errors on each gpu
 		archive_log();
@@ -210,19 +166,19 @@ sub monitor
 		reboot();
 	} elsif ($line =~ /(cudaFree failed|Miner ended\/crashed)/){
 		my $error_string = "$1 Rebooting!";
-		prowl_notify($rig_id,$error_string,$error_string,$url);
+		push_notify($rig_id,$error_string,$error_string,$url);
 		write_log($error_log, $log_time . "\t" . $error_string);			# error_log, keeps the error strings in a file
 		write_log($err_csv, $log_time . "," .  join(",", @gpu_errors));			# err.csv, keeps a count for the errors on each gpu
 		archive_log();
 
 	} elsif ($line =~ /(Miner cannot initialize.*)/){					# critical error 
-		prowl_notify($rig_id,"Critical Error: ". $1 . ". Rebooting!", ' ', $url);
+		push_notify($rig_id,"Critical Error: ". $1 . ". Rebooting!", ' ', $url);
 		write_log($error_log, $log_time . "\t" . $1);	# error_log, keeps the error strings in a file
 		archive_log();
 		reboot();
 
 	} elsif ($line =~ /(Checking connection to simplemining\.net|Total cards\: \d+)/){	# Important notifications
-		prowl_notify($rig_id,$1," ",$url);
+		push_notify($rig_id,$1," ",$url);
 		write_log($error_log, $log_time . "\t" . $1);					# error_log, keeps the error strings in a file
 
 	} elsif ($line =~ /(GPU \#\d+ got incorrect share).*(If.*)/){				# Warning!
@@ -233,7 +189,7 @@ sub monitor
 			$gpu_errors[$1]++;
 			$error_title .= "(" . $gpu_errors[$1] . ")";
 
-			prowl_notify($rig_id,$error_title.$error_string,' ',$url) unless ($gpu_errors[$1] % 100);	# notifies every 100 errors
+			push_notify($rig_id,$error_title.$error_string,' ',$url) unless ($gpu_errors[$1] % 100);	# notifies every 100 errors
 		}
 
 		write_log($error_log, $log_time . "\t" . $error_title . " " . $error_string);	# error_log, keeps the error strings in a file
@@ -262,19 +218,32 @@ exit;
 
 #############################################################
 
-sub prowl_notify
+sub push_notify
 {
 	my ($appname, $eventname, $notification, $url) = @_;
 
-	my $t_diff = (time - $prowl_last_time);
-	unless ($prowl_last_message eq $notification && $t_diff < 60){
-		system $prowl . " -apikey=" . $prowl_apikey . " -application='". $appname . "' -event='" . $eventname . "' -notification='" . $notification . "' -priority=2 -url=" . $url;
+	my $t_diff = (time - $push_cfg->{push_last_time});
+	unless ($push_cfg->{last_message} eq $notification && $t_diff < 60){
 
-		$prowl_last_message = $notification;
-		$prowl_last_time = time;
+		my $cmd;
+		if ($push_cfg->{prowl_apikey}){			# Send off the message via Prowlapp
+			$cmd = 'curl -s -d "apikey=' . $push_cfg->{prowl_apikey} . '&priority=2&application=' . $appname . '&event=' . $eventname . '&description=' . $notification . '" https://api.prowlapp.com/publicapi/add -o /dev/null';
+		}
+		if ($push_cfg->{nma_apikey}){		# Send off the message via NMA
+			$cmd = 'curl --silent --data-ascii "apikey=' . $push_cfg->{nma_apikey} . '" --data-ascii "application=' . $appname . '" --data-ascii "event=' . $eventname . '" --data-asci "description=' . $notification . '" --data-asci "priority=2" https://www.notifymyandroid.com/publicapi/notify -o /dev/null';
+		}
+
+		if (system($cmd)){
+			warn "ERROR: $_ $! $/ $cmd";
+		} else {
+			print "Notification sent\n\n";
+		}
+
+		$push_cfg->{last_message} = $notification;
+		$push_cfg->{last_time} = time;
 	} else {
 		my $log_time = strftime '%Y-%m-%d %H-%M-%S', gmtime(); # 2014-11-09 15-31-13
-		write_log($error_log, $log_time . "\t" . "Last prowl message ignored to avoid spamming [" . $notification . "] " . $t_diff);	# error_log, keeps the error strings in a file
+		write_log($error_log, $log_time . "\t" . "Last push message ignored to avoid spamming [" . $notification . "] " . $t_diff);	# error_log, keeps the error strings in a file
 	}
 
 
@@ -327,14 +296,13 @@ sub get_rigname
 
 	my $rigname;
 
-	#"-epool stratum+tcp:\/\/daggerhashimoto.usa.nicehash.com:3353 -ewal 16fXkRFv2Yon91iTC89vUeuFt2nK55LRrf.amd580s -epsw x -esm 3 -allpools 1 -estale 0 -dpool stratum+tcp:\/\/decred.usa.nicehash.com:3354 -dwal 16fXkRFv2Yon91iTC89vUeuFt2nK55LRrf.amd580s"
-	# --user dacrypt.nvidias
-	if ($value =~ /-user \S+\.(\S+)?(\s+|$)/){
+	if ($value =~ /--user \S+\.(\S+)?(\s+|$)/){				# --user youraccount.$rigName --pass x
 		$rigname = $1;
-	} 
-	if ($value =~ /-ewal \S+(\.|\/)(\S+)?(\s+|$)/){
+	} elsif ($value =~ /-.wal \S+\/(.+)\/\S+\@\S+?(\s+|$)/){		# -.wal $walletETH/$rigName/email@domain.com
 		$rigname = $2;
-	} 
+	} elsif ($value =~ /-.wal \S+(\.|\/)(\S+)?(\s+|$)/){			# -.wal $walletETH/$rigName
+		$rigname = $2;
+	}
 
 	return ($rigname);
 }
@@ -380,7 +348,7 @@ sub process_stats
 
 	if ($error){
 		$error_string =~ s/ - $//;
-		prowl_notify($rig_id,$error . " " . $error_string,' ',$url) if ($notify);
+		push_notify($rig_id,$error . " " . $error_string,' ',$url) if ($notify);
 		write_log($error_log, $log_time . "\t" . $error . " " . $error_string);	# error_log, keeps the error strings in a file
 		write_log($err_csv, $log_time . "," .  join(",", @gpu_errors)); # err.csv, keeps a count for the errors on each gpu
 	}
@@ -435,7 +403,7 @@ sub process_stats_dstm
 
 	if ($error){
 		$error =~ s/ - $//;
-		prowl_notify($rig_id,$error,' ',$url) if ($notify);
+		push_notify($rig_id,$error,' ',$url) if ($notify);
 		write_log($error_log, $log_time . "\t" . $error);	# error_log, keeps the error strings in a file
 		write_log($err_csv, $log_time . "," .  $gpu_n . "," . $gpu_errors[$gpu_n]);	# err.csv, keeps a count for the errors on each gpu
 	}
@@ -461,7 +429,7 @@ sub process_error_dstm
 		$gpu_errors[$gpu_n]++
 	}
 
-	prowl_notify($rig_id,$line,' ',$url);
+	push_notify($rig_id,$line,' ',$url);
 	write_log($error_log, $log_time . "\t" . $line);	# error_log, keeps the error strings in a file
 	write_log($err_csv, $log_time . "," .  $gpu_n, $gpu_errors[$gpu_n]);	# err.csv, keeps a count for the errors on each gpu
 
@@ -472,5 +440,38 @@ sub reboot
 {
 	system('utils/force_reboot.sh &');
 	system('reboot &');
-	die "sm-monitor.pl -> Error detected, rebooting";
+	die "sm-monitor.pl -> rebooting host";
 }
+
+sub get_push_cfg
+{
+	my $push_cfg;
+
+	# get push config
+	$push_cfg->{prowl_apikey} = qx/cat $config_file | grep -v \\\# | grep PROWL_API | head -n1 | cut -d = -f 2 | cut -d ' ' -f 1 | tr '[:upper:]' '[:lower:]' | tr -d '\r'/;
+	$push_cfg->{nma_apikey} = qx/cat $config_file | grep -v \\\# | grep NMA_API | head -n1 | cut -d = -f 2 | cut -d ' ' -f 1 | tr '[:upper:]' '[:lower:]' | tr -d '\r'/;
+
+	chomp($push_cfg->{prowl_apikey});
+	chomp($push_cfg->{nma_apikey});
+
+	if (($push_cfg->{prowl_apikey} =~ /(prowl_api|^\s+$)/ or !$push_cfg->{prowl_apikey}) && ($push_cfg->{nma_apikey} =~ /(nma_api|^\s+$)/ or !$push_cfg->{nma_apikey})){	# 	no key
+		$push_cfg->{prowl_apiconf} = qx/cat $config_file | grep PROWL_API/;
+		$push_cfg->{nma_apiconf} = qx/cat $config_file | grep NMA_API/;
+
+		if (!$push_cfg->{prowl_apiconf} && !$push_cfg->{nma_apiconf}){ 	# and variable missing
+			print "Edit $config_file and add your API KEY\n";
+
+			system("echo '\n# sm-monitor: To receive push notifications, you need to set at least one of the following API Keys:' >> $config_file");
+			system("echo '# iOS: Get Prowl iOS app and your Prowl API Key visiting https://www.prowlapp.com/' >> $config_file");
+			system("echo 'PROWL_API=' >> $config_file");
+			system("echo '# Android: Get NMA app and Notify My Android API Key in http://notifymyandroid.appspot.com/' >> $config_file");
+			system("echo 'NMA_API=' >> $config_file");
+		}
+		system ("nano $config_file");
+
+		exit; 
+	}
+
+	return ($push_cfg);
+}
+
