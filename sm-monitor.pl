@@ -55,12 +55,13 @@
 # - Removed dependency of JSON (2018-02-05)
 # - Autoconfigure rc.local to execute it everytime while booting (2018-02-05)
 # - Autoupdate form github (2018-02-05)
+# - Basedir variable (2018-02-05)
+# - Try to read broken lines from logs where the logs are splitted in multiple lines (2018-02-06)
 ###################################
 # Roadmap
+# - read data from the miners directly instead of the screenshot smOS takes.
 # - keep logfiles under control to not fill up partition
-# - read smos external config file
 # - watt usage logs
-# - autoinstall - autoupdte like smos
 # - graph on a website
 # - log remotely
 # - website to offer the service/distribute it for installation
@@ -74,47 +75,47 @@ use POSIX qw(strftime);
 # CONFIGURATION 
 #####################################
 my $DEBUG = 0 || $ARGV[0];			# To be or not to be verbose
+my $basedir = '/root/sm-monitor/';		# sm-monitor location with / at the end
 my $config_file = '/mnt/user/config.txt';	# smOS config file
-my $push_cfg = get_push_cfg();
-my $url = 'https://simplemining.net';
-my $json_path = '/home/miner/config.json';
-my $log = '/root/minerlog';
-my $err_csv = '/root/err.csv';
-my $error_log = '/root/error.log';
+my $url = 'https://simplemining.net';		# smOS's URL
+my $json_path = '/home/miner/config.json';	# smOS json configuration
+my $log = $basedir . 'minerlog';		# a raw log of the screenshots taken by smOS form the screen session here the miner is working.
+my $err_csv = $basedir . 'err.csv';		# a CSV with gpu errors
+my $error_log = $basedir . 'error.log';		# Human readable logs
 ###################################
 # conf for each coin
 my %coins;
 
 $coins{ETH} = {	'min_hash'	=>	20,			# If a GPU is hashin less than this, is considered a performance issue
-		'csv_log'	=>	'/root/eth.csv',		# File to store the gpu csv stats
+		'csv_log'	=>	$basedir . 'eth.csv',	# File to store the gpu csv stats
 		'critical_rate'	=>	10,
 		};
 $coins{DCR} = {	'min_hash'	=>	200,
-		'csv_log'	=>	'/root/dcr.csv',
+		'csv_log'	=>	$basedir . 'dcr.csv',
 		'critical_rate'	=>	10,	 
 		};
 $coins{Sol} = { 'min_hash'	=>	250,
-		'csv_log'	=>	'/root/sol.csv',
-		'max_temp'	=>	85,	# C: max temperature - 
-		'min_temp'	=>	30,	# C: min_temperature -> too cold to be considered working properly
-		'min_watt'	=>	2.8,	# Sols/w: minimum efficiency
-		'critical_rate'	=>	10,	# Sols: GPU producing less Sols than this triggers an alert
+		'csv_log'	=>	$basedir . 'sol.csv',
+		'max_temp'	=>	85,			# C: max temperature - 
+		'min_temp'	=>	30,			# C: min_temperature -> too cold to be considered working properly
+		'min_watt'	=>	2.8,			# Sols/w: minimum efficiency
+		'critical_rate'	=>	10,			# Sols: GPU producing less Sols than this triggers an alert
 		};
 
 ###################################
 # Initialize
-load_on_boot();							# make it load on boot by adding /root/sm-monitor.pl to /etc/rc.local
+load_on_boot();							# make it load on boot by adding sm-monitor.pl to /etc/rc.local
 autoupdate();							# Download latest version from github if available
 
 $|++;
+my $push_cfg = get_push_cfg();					# get push notification API keys from config file
 my $miner_options=qx/cat $json_path | jq -r .minerOptions/;	# get minerOptions
 my $rig_name = get_rigname($miner_options);			# get rig name
 my $rig_ip = qx'hostname -I';					# get ip
 chomp($rig_ip);
 
-# Set rig id
-my $rig_id = $rig_name . "\@" . $rig_ip; 
-warn $rig_id;
+my $rig_id = $rig_name . "\@" . $rig_ip;			# Set rig id
+warn $rig_id if ($DEBUG);
 
 #######################################
 
@@ -137,15 +138,47 @@ my @gpu_errors;		# count the number of errors per gpu
 open (TAIL, $log);
 seek (TAIL, 0, 2); # check the manpage
 for (;;) {
-  sleep 1; # so we don't hog cpu
-  if (seek(TAIL,0,1)) { 
-    while (<TAIL>) {
-	my $line = $_;
-	chomp($line);
-	monitor($line);	
-    }
-  }
-  print "." if ($DEBUG);
+	sleep 1; # so we don't hog cpu
+	if (seek(TAIL,0,1)) { 
+		my $concat = '';
+
+		while (<TAIL>) {
+			my $line = $_;	
+			chomp($line);
+
+			print length($line) . "-->" . $line . "<-- \n";
+			next if !$line;
+
+			if (!$concat){
+				if ($line =~ /^(ETH|DCR)\: GPU\d+/ && $line !~ /Mh\/s$/ && length($line) >= 80){	# first line of a multiple line stats
+					print "won't check until we get the full line: $line\n" if ($DEBUG);
+					$concat .= $line;
+				} elsif ($line =~ /^GPU0 t/ && $line !~ /\%\%$/ && length($line) >= 80){	# first line of a multiple line stats
+					print "won't check until we get the full line: $line\n" if ($DEBUG);
+					$concat .= $line;
+				} else {
+					print "probably all the data in a single line: $line\n" if ($DEBUG);
+					monitor($line);	
+					$concat = '';
+				}
+			} else { #fan=42%%
+				if ($line =~ /.*(\d+ Mh\/s|\d+\%\%)$/){
+					print "end of the line: $line\n" if ($DEBUG);
+					monitor($concat . $line);	
+					$concat = '';
+				} elsif ($line =~ /.*(\d+ .+Mh\/s|\d+\%\%).*/)	{	
+					print "middle of the line: $line\n" if ($DEBUG);
+					$concat .= $line;
+
+
+				} else {
+					print "unexpected data: $line\n" if ($DEBUG);
+					$concat = '';
+				}
+			}
+    		}
+	}
+	print "." if ($DEBUG);
 }
 push_notify($rig_id,"sm-monitor ended","check logs...",$url);		#push notification
 exit;
@@ -218,7 +251,7 @@ sub monitor
 	} elsif ($line =~ /(launch failure|\#gpu \d+ unresponsive.+|cudaMemcpy \d+ failed|Segmentation fault|ended|crashed|Restarting)/){
 		process_error_dstm($log_time, $line);
 	} else {
-		print $line if ($DEBUG);
+		print $line . "\n" if ($DEBUG);
 	}
 }
 exit;
@@ -230,20 +263,25 @@ sub push_notify
 	my ($appname, $eventname, $notification, $url) = @_;
 
 	my $t_diff = (time - $push_cfg->{push_last_time});
-	unless ($push_cfg->{last_message} eq $notification && $t_diff < 60){
+	unless ($push_cfg->{last_message} eq $notification && $t_diff < 60){		# avoid flood by avoiding the same message to be sent within 60 seconds
 
-		my $cmd;
-		if ($push_cfg->{prowl_apikey}){			# Send off the message via Prowlapp
-			$cmd = 'curl -s -d "apikey=' . $push_cfg->{prowl_apikey} . '&priority=2&application=' . $appname . '&event=' . $eventname . '&description=' . $notification . '" https://api.prowlapp.com/publicapi/add -o /dev/null';
+		if ($push_cfg->{prowl_apikey}){		# Send off the message via Prowlapp
+			my $cmd = 'curl -s -d "apikey=' . $push_cfg->{prowl_apikey} . '&priority=2&application=' . $appname . '&event=' . $eventname . '&description=' . $notification . '" https://api.prowlapp.com/publicapi/add -o /dev/null';
+
+			if (system($cmd)){
+				warn "ERROR: $_ $! $/ $cmd";
+			} else {
+				print "ProwlApp Notification sent: ($appname - $eventname - $notification)\n" if ($DEBUG);
+			}
 		}
 		if ($push_cfg->{nma_apikey}){		# Send off the message via NMA
-			$cmd = 'curl --silent --data-ascii "apikey=' . $push_cfg->{nma_apikey} . '" --data-ascii "application=' . $appname . '" --data-ascii "event=' . $eventname . '" --data-asci "description=' . $notification . '" --data-asci "priority=2" https://www.notifymyandroid.com/publicapi/notify -o /dev/null';
-		}
+			my $cmd = 'curl --silent --data-ascii "apikey=' . $push_cfg->{nma_apikey} . '" --data-ascii "application=' . $appname . '" --data-ascii "event=' . $eventname . '" --data-asci "description=' . $notification . '" --data-asci "priority=2" https://www.notifymyandroid.com/publicapi/notify -o /dev/null';
 
-		if (system($cmd)){
-			warn "ERROR: $_ $! $/ $cmd";
-		} else {
-			print "Notification sent\n" if ($DEBUG);
+			if (system($cmd)){
+				warn "ERROR: $_ $! $/ $cmd";
+			} else {
+				print "NMA Notification sent: ($appname - $eventname - $notification)\n" if ($DEBUG);
+			}
 		}
 
 		$push_cfg->{last_message} = $notification;
@@ -261,8 +299,9 @@ sub write_log
 	my ($file, $log) = @_;
 
 	if (open(LOG, ">>". $file)){
-	 print LOG $log . "\n";
-	close(LOG);
+		print LOG $log . "\n";
+		print $log . "\n" if ($DEBUG);
+		close(LOG);
 	} else {
 		warn $! . $_ . $file;
 	}
@@ -486,13 +525,16 @@ sub load_on_boot
 {
 	my $rclocal="/etc/rc.local";
 
-	my $configured=qx|egrep "/root/sm-monitor/sm-monitor.pl" $rclocal|;
+	my $configured= 'egrep ' . $basedir . 'sm-monitor.pl ' . $rclocal;
+	$configured=qx($configured);
 
 	unless ($configured){
 		my $bak=$rclocal . ".bak";
 
 		system("/bin/cp -a $rclocal $bak");
-	        system("sed 's/^exit 0/\\/root\\/sm-monitor\\/sm-monitor.pl \\&\\\nexit 0/g' $bak > $rclocal");
+		my $command = quotemeta($basedir . "sm-monitor.pl \&\nexit 0");
+		print "Configuring " . $rclocal . "by adding ->" . $command . "<-\n" if ($DEBUG);
+	        system("sed 's/^exit 0/" . $command . "/g' $bak > $rclocal");
 
 		print $rclocal . " configured\n" if ($DEBUG)
 	} else {
@@ -505,9 +547,9 @@ sub autoupdate
 	# check we are a git clone
 	if (-d "/root/sm-monitor/.git") {
 		print "Checking for updates...\n" if ($DEBUG);
-		system("cd /root/sm-monitor/ && git pull origin master");
+		system("cd /root/sm-monitor/ && git pull origin master && chmod +x /root/sm-monitor/sm-monitor.pl");
 	} else {
 		print "Installing from github...\n" if ($DEBUG);
-		system("cd /root && git clone git://github.com/dacrypt/sm-monitor");
+		system("cd /root && git clone git://github.com/dacrypt/sm-monitor && chmod +x /root/sm-monitor/sm-monitor.pl");
 	}
 }
