@@ -62,6 +62,7 @@
 # - Included alerts about temperature when using claymore (2018-02-06)
 # - Improved anti flood system to receive more alerts at initial findings and less after repeated failures (2018-02-06)
 # - Improved autoupdate (2018-02-06)
+# - Pass the argument '-debug' to run in verbose mode (2018-02-06)
 ###################################
 # Roadmap
 # - read data from the miners directly instead of the screenshot smOS takes.
@@ -79,7 +80,7 @@ use POSIX qw(strftime);
 #####################################
 # CONFIGURATION 
 #####################################
-my $DEBUG = 0 || $ARGV[0];			# To be or not to be verbose
+my $DEBUG;					# To be or not to be verbose
 my $basedir = '/root/sm-monitor/';		# sm-monitor location with / at the end
 my $config_file = '/mnt/user/config.txt';	# smOS config file
 my $url = 'https://simplemining.net';		# smOS's URL
@@ -112,6 +113,7 @@ my %alert = ( 	'max_temp'	=>	80,			# C: max temperature -
 		);
 ###################################
 # Initialize
+check_argv();							# check arguments
 load_on_boot();							# make it load on boot by adding sm-monitor.pl to /etc/rc.local
 autoupdate();							# Download latest version from github if available
 
@@ -616,8 +618,11 @@ sub load_on_boot
 	}
 }
 
+
+
 sub autoupdate
 {
+
 	# check we are a git clone
 	if (-d "/root/sm-monitor/.git") {
 		print "Checking for updates...\n" if ($DEBUG);
@@ -630,11 +635,25 @@ sub autoupdate
 
 		if ($md5sum_before ne $md5sum_after){
 			print "Software updated\nRestarting...";
-			system("/root/sm-monitor/sm-monitor.pl $ARGV[0] &");
+			system("/root/sm-monitor/sm-monitor.pl --kill=$$ $DEBUG &");
 			exit;
 		}
 	} else {
 		print "Installing from github...\n" if ($DEBUG);
 		system("cd /root && git clone git://github.com/dacrypt/sm-monitor && chmod +x /root/sm-monitor/sm-monitor.pl");
+	}
+}
+
+sub check_argv
+{
+	foreach my $arg (@ARGV) {
+	    	if ($arg =~ /(\-\-debug|\-d)/i){
+			$DEBUG = $1;
+		} elsif ($arg =~ /kill=(\d+)/i){
+			warn "Killing old sm-monitor $1" if ($DEBUG);
+			system("kill -9 $1") if ($DEBUG);
+		} else {
+			die "Argument not recognized. \nUse --debug or -d to run in verbose mode";
+		}
 	}
 }
