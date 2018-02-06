@@ -57,6 +57,10 @@
 # - Autoupdate form github (2018-02-05)
 # - Basedir variable (2018-02-05)
 # - Try to read broken lines from logs where the logs are splitted in multiple lines (2018-02-06)
+# - Claymore temperature and fan speed log reading support (2018-02-06)
+# - Log temperature and fan speed in temperature.csv and fans.csv (2018-02-06)
+# - Included alerts about temperature when using claymore (2018-02-06)
+# - Improved anti flood system to receive more alerts at initial findings and less after repeated failures (2018-02-06)
 ###################################
 # Roadmap
 # - read data from the miners directly instead of the screenshot smOS takes.
@@ -81,6 +85,8 @@ my $url = 'https://simplemining.net';		# smOS's URL
 my $json_path = '/home/miner/config.json';	# smOS json configuration
 my $log = $basedir . 'minerlog';		# a raw log of the screenshots taken by smOS form the screen session here the miner is working.
 my $err_csv = $basedir . 'err.csv';		# a CSV with gpu errors
+my $temp_csv = $basedir . 'temperature.csv';	# a CSV with gpu temperatures
+my $fans_csv = $basedir . 'fans.csv';		# a CSV with fans speed
 my $error_log = $basedir . 'error.log';		# Human readable logs
 ###################################
 # conf for each coin
@@ -96,12 +102,13 @@ $coins{DCR} = {	'min_hash'	=>	200,
 		};
 $coins{Sol} = { 'min_hash'	=>	250,
 		'csv_log'	=>	$basedir . 'sol.csv',
-		'max_temp'	=>	85,			# C: max temperature - 
-		'min_temp'	=>	30,			# C: min_temperature -> too cold to be considered working properly
 		'min_watt'	=>	2.8,			# Sols/w: minimum efficiency
-		'critical_rate'	=>	10,			# Sols: GPU producing less Sols than this triggers an alert
+		'critical_rate'	=>	10			# Sols: GPU producing less Sols than this triggers an alert
 		};
 
+my %alert = ( 	'max_temp'	=>	80,			# C: max temperature - 
+		'min_temp'	=>	30			# C: min_temperature -> too cold to be considered working properly
+		);
 ###################################
 # Initialize
 load_on_boot();							# make it load on boot by adding sm-monitor.pl to /etc/rc.local
@@ -128,11 +135,14 @@ foreach (keys %coins){
 	system "touch " . $coins{$_}{csv_log};
 }
 
+
+#######################################
+my @gpu_errors;		# count the number of errors per gpu
+my %notification;	# used to message flood control 
+
 #######################################
 #starts
 push_notify($rig_id,"sm-monitor started","monitoring logs...",$url);		#push notification
-
-my @gpu_errors;		# count the number of errors per gpu
 
 # reads logs
 open (TAIL, $log);
@@ -145,8 +155,6 @@ for (;;) {
 		while (<TAIL>) {
 			my $line = $_;	
 			chomp($line);
-
-			print length($line) . "-->" . $line . "<-- \n";
 			next if !$line;
 
 			if (!$concat){
@@ -161,7 +169,7 @@ for (;;) {
 					monitor($line);	
 					$concat = '';
 				}
-			} else { #fan=42%%
+			} else {
 				if ($line =~ /.*(\d+ Mh\/s|\d+\%\%)$/){
 					print "end of the line: $line\n" if ($DEBUG);
 					monitor($concat . $line);	
@@ -226,17 +234,23 @@ sub monitor
 		my $error_string = $2;
 
 		if ($error_title =~ /GPU \#(\d+) /){	#count the number of errors for this GPU
-			$gpu_errors[$1]++;
-			$error_title .= "(" . $gpu_errors[$1] . ")";
+			my $gpu_n = $1;
+			$gpu_errors[$gpu_n]++;
+			$error_title .= "(" . $gpu_errors[$gpu_n] . ")";
 
-			push_notify($rig_id,$error_title.$error_string,' ',$url) unless ($gpu_errors[$1] % 100);	# notifies every 100 errors
+			push_notify($rig_id,$error_title.$error_string,' ',$url) unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . 'share'});	# notifies every $notification errors
+			$notification{$gpu_n . 'share'} = exists $notification{$gpu_n . 'share'} ? $notification{$gpu_n . 'share'} *=2 : '1';	# next time wait twice the amount of errors to notify about the same issue
+
 		}
 
 		write_log($error_log, $log_time . "\t" . $error_title . " " . $error_string);	# error_log, keeps the error strings in a file
 		write_log($err_csv, $log_time . "," .  join(",", @gpu_errors));			# err.csv, keeps a count for the errors on each gpu
 
-	} elsif ($line =~ /(DCR|ETH)\: (GPU\d+ (.*) Mh\/s.*)$/){
-		process_stats($1, $2, $log_time);
+	} elsif ($line =~ /(DCR|ETH)\: (GPU0 (.*) Mh\/s.*)$/){
+		process_stats_claymore_hash($1, $2, $log_time);
+
+	} elsif ($line =~ /GPU0 t=\d+C fan=\d+%%/){
+		process_stats_claymore_fans($log_time, $line);
 
 	#>  GPU2  71C  Sol/s: 279.7  Sol/W: 4.03  Avg: 283.8  I/s: 151.8  Sh: 0.23   1.00
 	# 230
@@ -300,7 +314,7 @@ sub write_log
 
 	if (open(LOG, ">>". $file)){
 		print LOG $log . "\n";
-		print $log . "\n" if ($DEBUG);
+		print $file . "\t" . $log . "\n" if ($DEBUG);
 		close(LOG);
 	} else {
 		warn $! . $_ . $file;
@@ -361,7 +375,35 @@ sub archive_log
 	system("gzip -9 $savelog");
 }
 
-sub process_stats
+sub process_stats_claymore_fans
+{
+	my ($log_time, $raw_stats) = @_;
+
+	# , GPU1 t=65C fan=48%%, GPU2 t=66C fan=48%%, GPU3 t=67C fan=10
+	my @gpu_stats = split(/,/, $raw_stats);
+
+	my $error;
+	my $error_string;
+	my $gpu_n=0;
+	my $log = $log_time;
+	my $notify;
+
+	foreach my $gpu_stat (@gpu_stats){
+		my $gpu_n;
+		my $temp;
+		my $speed;
+
+		if ($gpu_stat =~ /GPU(\d+) t\=(\d+)C fan\=(\d+)\%\%/){
+			$gpu_n = $1;			
+			$temp = $2;
+			$speed = $3;
+
+			process_stats_fans($log_time, $gpu_n, $temp, $speed);
+		}
+	}
+}
+
+sub process_stats_claymore_hash
 {
 	my ($coin, $raw_stats, $log_time) = @_;
 
@@ -381,7 +423,9 @@ sub process_stats
 		if ($gpu_stat < $coins{$coin}{min_hash}){	# something's wrong
 			$gpu_errors[$gpu_n]++;
 			$error ||= "GPU$gpu_n $coin performing poorly";
-			$notify = 1 unless ($gpu_errors[$gpu_n] % 100);			# will report only if at least 100 errors or if hash rate is 0 and at least 3
+
+			$notify = 1 unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . $coin . 'hash'});
+			$notification{$gpu_n . $coin . 'hash'} = exists $notification{$gpu_n . $coin . 'hash'} ? $notification{$gpu_n . $coin . 'hash'} *=2 : '1';	# next time wait twice the amount of errors to notify about the same issue
 
 			if ($gpu_stat < 1){
 				$error = "GPU$gpu_n $coin Critical Performance";
@@ -400,6 +444,44 @@ sub process_stats
 	}
 	write_log($coins{$coin}{csv_log}, $log);
 }
+
+#
+# Log fan speed and temperatures and alert about temperature problems
+#
+sub process_stats_fans
+{
+	my ($log_time, $gpu_n, $temp, $speed) = @_;
+
+	my $error;
+	my $notify;
+
+	my $temp_log = $log_time . ",$gpu_n,$temp";
+	my $speed_log = $log_time . ",$gpu_n,$speed";
+
+	write_log($temp_csv, $temp_log);
+	write_log($fans_csv, $speed_log) unless ($speed < 0);
+
+	if ($temp >= $alert{max_temp}){	# high temperature
+		$gpu_errors[$gpu_n]++;
+		$error .= "GPU$gpu_n $temp C -HIGH TEMP (" . $gpu_errors[$gpu_n] . ")";
+		$notify = 1 unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . 'temp'});                   
+		$notification{$gpu_n . 'temp'} = exists $notification{$gpu_n . 'temp'} ? $notification{$gpu_n . 'temp'} *=2 : '1';	# next time wait twice the amount of errors to notify about the same issue
+	}
+
+	if ($temp <= $alert{min_temp}){	# low temperature...not working?
+		$gpu_errors[$gpu_n]++;
+		$error .= "GPU$gpu_n $temp C -LOW TEMP (" . $gpu_errors[$gpu_n] . ")";
+		$notify = 1 unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . 'mintemp'});
+		$notification{$gpu_n . 'mintemp'} = exists $notification{$gpu_n . 'mintemp'} ? $notification{$gpu_n . 'mintemp'} *=2 : '1';	# next time wait twice the amount of errors to notify about the same issue
+	}
+
+	if ($error){
+		push_notify($rig_id,$error,' ',$url) if ($notify);
+		write_log($error_log, $log_time . "\t" . $error);		# error_log, keeps the error strings in a file
+		write_log($err_csv, $log_time . "," .  join(",", @gpu_errors)); # err.csv, keeps a count for the errors on each gpu
+	}
+}
+
 
 # Parse logs to get GPU stats compatbile with "dstm" miner logs format
 sub process_stats_dstm
@@ -421,24 +503,13 @@ sub process_stats_dstm
 	if ($rate < $coins{$coin}{min_hash}){	# not performing well
 		$gpu_errors[$gpu_n]++;
 		$error ||= "GPU$gpu_n $rate -Performing Poorly (avg: $avg)";
-		$notify = 1 unless ($gpu_errors[$gpu_n] % 100);		# report only if at least 100 performance errors or if hash rate is critical
+		$notify = 1 unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . $coin . 'hash'});
+		$notification{$gpu_n . $coin . 'hash'} = exists $notification{$gpu_n . $coin . 'hash'} ? $notification{$gpu_n . $coin . 'hash'} *=2 : '1';	# next time wait twice the amount of errors to notify about the same issue
 
 		if ($rate < $coins{$coin}{critical_rate}){
 			$error = "GPU$gpu_n $coin $rate -PERFORMANCE ISSUE (avg: $avg)";
 			$notify = 1 unless ($gpu_errors[$gpu_n] % 10);	# or if hash rate is 0 and at least 10 errors
 		}
-	}
-
-	if ($temp >= $coins{$coin}{max_temp}){	# high temperature
-		$gpu_errors[$gpu_n]++;
-		$error .= "GPU$gpu_n $temp C -HIGH TEMP (" . $gpu_errors[$gpu_n] . ")";
-		$notify = 1
-	}
-
-	if ($temp <= $coins{$coin}{min_temp}){	# low temperature...not working?
-		$gpu_errors[$gpu_n]++;
-		$error .= "GPU$gpu_n $temp C -LOW TEMP (" . $gpu_errors[$gpu_n] . ")";
-		$notify = 1
 	}
 
 	if ($watt <= $coins{$coin}{min_watt}){	# performance issue
@@ -451,12 +522,14 @@ sub process_stats_dstm
 		$error =~ s/ - $//;
 		push_notify($rig_id,$error,' ',$url) if ($notify);
 		write_log($error_log, $log_time . "\t" . $error);	# error_log, keeps the error strings in a file
-		write_log($err_csv, $log_time . "," .  $gpu_n . "," . $gpu_errors[$gpu_n]);	# err.csv, keeps a count for the errors on each gpu
+		write_log($err_csv, $log_time . "," .  join(",", @gpu_errors)); # err.csv, keeps a count for the errors on each gpu
 	}
 
 	# GPU#, C, Sol/s, Sol/W, Avg, I/s, Sh, pcnt, extra
-	$log .= ",$gpu_n,$temp,$rate,$watt,$avg,$is,$sh,$pcn";
+	$log .= ",$gpu_n,$rate,$watt,$avg,$is,$sh,$pcn";
 	write_log($coins{$coin}{csv_log}, $log);
+
+	process_stats_fans($log_time, $gpu_n, $temp, "-1");
 }
 
 sub process_error_dstm 
