@@ -3,7 +3,7 @@ A smarter way to mine. A monitoring and log collection script for simpleminingOS
 
 A perl script to monitor and notify via push notification events on mining rigs with SimpleMiningOS 
 
-This is a perl script designed to collect information from simpleminingOS logs and send push notifications via Prowl app with relevant information about the rig. It was written to read the logs for claymore dual mining ETH+DCR only.
+This is a perl script designed to collect information from simpleminingOS logs and send push notifications to iOS and Android devicea via 'Prowlapp' and 'NotifyMyAndroid' with relevant information about the rig. 
 
 I've wrote this script out of necessity to work along simpleminingOS to send push notifications via prowl app to a mobile phone with relevant information of the mining process. It will send you an alert if a rig just started, how many cards were detected, it will alert you in case of GPU hangs, if a GPU is not performing well and also collects the hashing values for each GPU in a rig into a CSV file. It also keeps an error log with relevant information for further examination and also reboots the machine in case of a GPU hang. 
 
@@ -36,6 +36,11 @@ The script will autoconfigure itself and will run at startup.
 # Update
 It will autoupdate form git everytime it runs. 
 You can update it manually executing 'cd /root/sm-monitor/ && git pull origin master'
+
+# Supported miner logs
+- Claymore with ETH and/or DCR
+- dstm with Equihash (Sols)
+- Need a new one? Let me know
 
 # Donations
 I'm giving away this piece of software for free under GNU licensing. If you feel it has some worth to you, you can donate to the BTC address at the bottom.
