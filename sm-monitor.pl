@@ -620,7 +620,7 @@ sub autoupdate
 	# check we are a git clone
 	if (-d "/root/sm-monitor/.git") {
 		print "Checking for updates...\n" if ($DEBUG);
-		system("cd /root/sm-monitor/ && git pull origin master && chmod +x /root/sm-monitor/sm-monitor.pl");
+		system("cd /root/sm-monitor/ && git reset --hard && git pull origin master && chmod +x /root/sm-monitor/sm-monitor.pl");
 	} else {
 		print "Installing from github...\n" if ($DEBUG);
 		system("cd /root && git clone git://github.com/dacrypt/sm-monitor && chmod +x /root/sm-monitor/sm-monitor.pl");
