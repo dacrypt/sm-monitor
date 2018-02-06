@@ -1,7 +1,7 @@
 # sm-monitor
 A smarter way to mine. A monitoring and log collection script for simpleminingOS
 
-A perl script to monitor, log and notify via push notification events on mining rigs with SimpleMiningOS 
+A perl script to monitor, log and notify via push notification events on mining rigs running SimpleMiningOS 
 
 This is a perl script designed to collect information from simpleminingOS logs and send push notifications to iOS and Android devicea via 'Prowlapp' and 'NotifyMyAndroid' with relevant information about the rig. 
 
@@ -13,7 +13,7 @@ It will create a log file in CSV format with the number of issues per gpu so you
 
 There is another file with errors in a human readable format were you can track issues over time. (error.log)
 
-Finally you will see some extra CSV files depending on your miner. For Sols, ETH and another one for DCR were the hash values are stored una way you can graph and see the performance of each GPU over time. You will be able to visualize the performance on a graph in Excel if you import those CSV.
+Finally you will see some extra CSV files depending on your miner. For Sols, ETH and another one for DCR were the hash values are stored in a way you can graph and see the performance of each GPU over time. You will be able to visualize the performance on a graph in Excel if you import those CSV.
 
 Depending on your mining software, we can collect information and send you alerts you get on your smartphone like:
 - Every time simplemining starts
@@ -34,7 +34,7 @@ Depending on your mining software, we can collect information and send you alert
 The script will autoconfigure itself and will run at startup. 
 
 # Update
-It will autoupdate form git everytime it runs. 
+It will autoupdate from the git repository everytime it runs. 
 You can update it manually executing 'cd /root/sm-monitor/ && git pull origin master'
 
 # Supported miner logs
@@ -55,7 +55,7 @@ You can update it manually executing 'cd /root/sm-monitor/ && git pull origin ma
 # Donations
 I'm giving away this piece of software for free under GNU licensing. If you feel it has some worth to you, you can donate to the BTC address at the bottom.
 
-I think you'll make more money by using this script because you rig will reboot itself in case of problems and you will be more informed about issues with your setup. I hope you find it useful and I hope you value the time and thinking put on it.
+I think you'll make more money by using this script because your rig will reboot itself in case of problems and you will be more informed about issues with your setup. I hope you find it useful and I hope you value the time and thinking put on it.
 
 Find me on SimpleMiningOS chat as "dacrypt"
 
