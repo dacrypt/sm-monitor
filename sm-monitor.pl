@@ -510,7 +510,7 @@ sub get_push_cfg
 			system("echo '\n# sm-monitor: To receive push notifications, you need to set at least one of the following API Keys:' >> $config_file");
 			system("echo '# iOS: Get Prowl iOS app and your Prowl API Key visiting https://www.prowlapp.com/' >> $config_file");
 			system("echo 'PROWL_API=' >> $config_file");
-			system("echo '# Android: Get NMA app and Notify My Android API Key in http://notifymyandroid.appspot.com/' >> $config_file");
+			system("echo '# Android: Get NMA app and Notify My Android API Key in http://www.notifymyandroid.com/' >> $config_file");
 			system("echo 'NMA_API=' >> $config_file");
 		}
 		system ("nano $config_file");
