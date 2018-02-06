@@ -238,8 +238,8 @@ sub monitor
 			$gpu_errors[$gpu_n]++;
 			$error_title .= "(" . $gpu_errors[$gpu_n] . ")";
 
-			push_notify($rig_id,$error_title.$error_string,' ',$url) unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . 'share'});	# notifies every $notification errors
 			$notification{$gpu_n . 'share'} = exists $notification{$gpu_n . 'share'} ? $notification{$gpu_n . 'share'} *=2 : '1';	# next time wait twice the amount of errors to notify about the same issue
+			push_notify($rig_id,$error_title.$error_string,' ',$url) unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . 'share'});	# notifies every $notification errors
 
 		}
 
@@ -424,8 +424,8 @@ sub process_stats_claymore_hash
 			$gpu_errors[$gpu_n]++;
 			$error ||= "GPU$gpu_n $coin performing poorly";
 
-			$notify = 1 unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . $coin . 'hash'});
 			$notification{$gpu_n . $coin . 'hash'} = exists $notification{$gpu_n . $coin . 'hash'} ? $notification{$gpu_n . $coin . 'hash'} *=2 : '1';	# next time wait twice the amount of errors to notify about the same issue
+			$notify = 1 unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . $coin . 'hash'});
 
 			if ($gpu_stat < 1){
 				$error = "GPU$gpu_n $coin Critical Performance";
@@ -464,15 +464,15 @@ sub process_stats_fans
 	if ($temp >= $alert{max_temp}){	# high temperature
 		$gpu_errors[$gpu_n]++;
 		$error .= "GPU$gpu_n $temp C -HIGH TEMP (" . $gpu_errors[$gpu_n] . ")";
-		$notify = 1 unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . 'temp'});                   
 		$notification{$gpu_n . 'temp'} = exists $notification{$gpu_n . 'temp'} ? $notification{$gpu_n . 'temp'} *=2 : '1';	# next time wait twice the amount of errors to notify about the same issue
+		$notify = 1 unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . 'temp'});                   
 	}
 
 	if ($temp <= $alert{min_temp}){	# low temperature...not working?
 		$gpu_errors[$gpu_n]++;
 		$error .= "GPU$gpu_n $temp C -LOW TEMP (" . $gpu_errors[$gpu_n] . ")";
-		$notify = 1 unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . 'mintemp'});
 		$notification{$gpu_n . 'mintemp'} = exists $notification{$gpu_n . 'mintemp'} ? $notification{$gpu_n . 'mintemp'} *=2 : '1';	# next time wait twice the amount of errors to notify about the same issue
+		$notify = 1 unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . 'mintemp'});
 	}
 
 	if ($error){
@@ -503,8 +503,8 @@ sub process_stats_dstm
 	if ($rate < $coins{$coin}{min_hash}){	# not performing well
 		$gpu_errors[$gpu_n]++;
 		$error ||= "GPU$gpu_n $rate -Performing Poorly (avg: $avg)";
-		$notify = 1 unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . $coin . 'hash'});
 		$notification{$gpu_n . $coin . 'hash'} = exists $notification{$gpu_n . $coin . 'hash'} ? $notification{$gpu_n . $coin . 'hash'} *=2 : '1';	# next time wait twice the amount of errors to notify about the same issue
+		$notify = 1 unless ($gpu_errors[$gpu_n] % $notification{$gpu_n . $coin . 'hash'});
 
 		if ($rate < $coins{$coin}{critical_rate}){
 			$error = "GPU$gpu_n $coin $rate -PERFORMANCE ISSUE (avg: $avg)";
