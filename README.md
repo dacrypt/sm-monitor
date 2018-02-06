@@ -24,7 +24,7 @@ Depending on your mining software, we can collect information and send you alert
 - High GPU temperature
 
 # Install
-1. You will need to get "Notify My Android app" (https://www.prowlapp.com/) for Android and/or "Prowlapp" (https://www.prowlapp.com) for iOS, install it on your device, register with them and get an API key to get notifications.
+1. You will need to get "Notify My Android app" (http://www.notifymyandroid.com/) for Android and/or "Prowlapp" (https://www.prowlapp.com) for iOS, install it on your device, register with them and get an API key to get notifications.
 2. SSH into yout miner with user 'root' and password 'miner1324'
 3. Execute 'cd /root && git clone git://github.com/dacrypt/sm-monitor && chmod +x sm-monitor/sm-monitor.pl'
 4. Run it '/root/sm-monitor/sm-monitor.pl'
