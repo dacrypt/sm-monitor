@@ -629,7 +629,7 @@ sub autoupdate
 		warn "md5 after: " . $md5sum_after if ($DEBUG);
 
 		if ($md5sum_before ne $md5sum_after){
-			print "Software updated";
+			print "Software updated\nRestarting...";
 			system("/root/sm-monitor/sm-monitor.pl $ARGV[0] &");
 			exit;
 		}
