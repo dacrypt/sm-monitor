@@ -61,6 +61,7 @@
 # - Log temperature and fan speed in temperature.csv and fans.csv (2018-02-06)
 # - Included alerts about temperature when using claymore (2018-02-06)
 # - Improved anti flood system to receive more alerts at initial findings and less after repeated failures (2018-02-06)
+# - Improved autoupdate (2018-02-06)
 ###################################
 # Roadmap
 # - read data from the miners directly instead of the screenshot smOS takes.
@@ -620,7 +621,14 @@ sub autoupdate
 	# check we are a git clone
 	if (-d "/root/sm-monitor/.git") {
 		print "Checking for updates...\n" if ($DEBUG);
+		my $md5sum_before = qx("md5sum /root/sm-monitor/sm-monitor.pl");
 		system("cd /root/sm-monitor/ && git reset --hard && git pull origin master && chmod +x /root/sm-monitor/sm-monitor.pl");
+		my $md5sum_after = qx("md5sum /root/sm-monitor/sm-monitor.pl");
+		if ($md5sum_before ne $md5sum_after){
+			print "Software updated";
+			system("/root/sm-monitor/sm-monitor.pl &");
+			exit;
+		}
 	} else {
 		print "Installing from github...\n" if ($DEBUG);
 		system("cd /root && git clone git://github.com/dacrypt/sm-monitor && chmod +x /root/sm-monitor/sm-monitor.pl");
