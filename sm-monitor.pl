@@ -630,7 +630,7 @@ sub autoupdate
 
 		if ($md5sum_before ne $md5sum_after){
 			print "Software updated";
-			system("/root/sm-monitor/sm-monitor.pl &");
+			system("/root/sm-monitor/sm-monitor.pl $ARGV[0] &");
 			exit;
 		}
 	} else {
