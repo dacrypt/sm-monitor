@@ -621,12 +621,12 @@ sub autoupdate
 	# check we are a git clone
 	if (-d "/root/sm-monitor/.git") {
 		print "Checking for updates...\n" if ($DEBUG);
-		my $md5sum_before = qx("md5sum /root/sm-monitor/sm-monitor.pl");
+		my $md5sum_before = qx'/usr/bin/md5sum /root/sm-monitor/sm-monitor.pl';
 		system("cd /root/sm-monitor/ && git reset --hard && git pull origin master && chmod +x /root/sm-monitor/sm-monitor.pl");
-		my $md5sum_after = qx("md5sum /root/sm-monitor/sm-monitor.pl");
+		my $md5sum_after = qx'/usr/bin/md5sum /root/sm-monitor/sm-monitor.pl';
 
-		warn $md5sum_before if ($DEBUG);
-		warn $md5sum_after if ($DEBUG);
+		warn "md5 before: " . $md5sum_before if ($DEBUG);
+		warn "md5 after: " . $md5sum_after if ($DEBUG);
 
 		if ($md5sum_before ne $md5sum_after){
 			print "Software updated";
