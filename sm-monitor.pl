@@ -63,6 +63,10 @@
 # - Improved anti flood system to receive more alerts at initial findings and less after repeated failures (2018-02-06)
 # - Improved autoupdate (2018-02-06)
 # - Pass the argument '-debug' to run in verbose mode (2018-02-06)
+# - Date/time format changed to: 2018-02-12 05:58:31 (2018-04-03)
+# - Option argument to skip autoupdate (2018-04-03)
+# - Autofix logs date/time format (2018-04-03)
+# - Argument to force fixing logs date/time format (2018-04-03)
 ###################################
 # Roadmap
 # - read data from the miners directly instead of the screenshot smOS takes.
@@ -81,6 +85,7 @@ use POSIX qw(strftime);
 # CONFIGURATION 
 #####################################
 my $DEBUG;					# To be or not to be verbose
+my $SKIP_UPDATE;				# Update or not
 my $basedir = '/root/sm-monitor/';		# sm-monitor location with / at the end
 my $config_file = '/mnt/user/config.txt';	# smOS config file
 my $url = 'https://simplemining.net';		# smOS's URL
@@ -619,29 +624,40 @@ sub load_on_boot
 }
 
 
-
 sub autoupdate
 {
 
-	# check we are a git clone
-	if (-d "/root/sm-monitor/.git") {
-		print "Checking for updates...\n" if ($DEBUG);
-		my $md5sum_before = qx'/usr/bin/md5sum /root/sm-monitor/sm-monitor.pl';
-		system("cd /root/sm-monitor/ && git reset --hard && git pull origin master && chmod +x /root/sm-monitor/sm-monitor.pl");
-		my $md5sum_after = qx'/usr/bin/md5sum /root/sm-monitor/sm-monitor.pl';
+	unless ($SKIP_UPDATE){
+		# check we are a git clone
+		if (-d "/root/sm-monitor/.git") {
+			print "Checking for updates...\n" if ($DEBUG);
+			my $md5sum_before = qx'/usr/bin/md5sum /root/sm-monitor/sm-monitor.pl';
+			system("cd /root/sm-monitor/ && git reset --hard && git pull origin master && chmod +x /root/sm-monitor/sm-monitor.pl");
+			my $md5sum_after = qx'/usr/bin/md5sum /root/sm-monitor/sm-monitor.pl';
 
-		warn "md5 before: " . $md5sum_before if ($DEBUG);
-		warn "md5 after: " . $md5sum_after if ($DEBUG);
+			warn "md5 before: " . $md5sum_before if ($DEBUG);
+			warn "md5 after: " . $md5sum_after if ($DEBUG);
 
-		if ($md5sum_before ne $md5sum_after){
-			print "Software updated\nRestarting...";
-			system("/root/sm-monitor/sm-monitor.pl --kill=$$ $DEBUG &");
-			exit;
+			if ($md5sum_before ne $md5sum_after){
+				print "Software updated\nRestarting...";
+				system("/root/sm-monitor/sm-monitor.pl --kill=$$ $DEBUG &");
+				exit;
+			}
+		} else {
+			print "Installing from github...\n" if ($DEBUG);
+			system("cd /root && git clone git://github.com/dacrypt/sm-monitor && chmod +x /root/sm-monitor/sm-monitor.pl");
 		}
-	} else {
-		print "Installing from github...\n" if ($DEBUG);
-		system("cd /root && git clone git://github.com/dacrypt/sm-monitor && chmod +x /root/sm-monitor/sm-monitor.pl");
 	}
+
+	warn "Check if there are old date/time log files" if ($DEBUG);
+	if (-f $err_csv){
+		my $lastlog = qx"tail -n1 $err_csv";
+		chomp($lastlog);
+		if ($lastlog =~ /^(\d\d\d\d\-\d\d\-\d\d) (\d\d)\-(\d\d)\-(\d\d)(.+)$/){
+			fix_time_format();
+		}
+	}
+	
 }
 
 sub check_argv
@@ -652,8 +668,52 @@ sub check_argv
 		} elsif ($arg =~ /kill=(\d+)/i){
 			warn "Killing old sm-monitor $1" if ($DEBUG);
 			system("kill -9 $1") if ($DEBUG);
+		} elsif ($arg =~ /\-\-fix\-time/i){
+			fix_time_format();
+		} elsif ($arg =~ /\-\-skip-update/i){
+			$SKIP_UPDATE=1;
 		} else {
-			die "Argument not recognized. \nUse --debug or -d to run in verbose mode";
+			die qq|Available options are:
+	--debug or -d to run in verbose mode
+	--fix-time to change the date/time format on the logs from HH-MM-SS to HH:MM:SS
+	--skip-update to skip checking for a new version on github
+	--help, -h (or anything else) to see this help\n|;
+		}
+	}
+}
+
+sub fix_time_format
+{
+	warn "Will fix date/time format on log files";
+
+	fix_time_format_file($err_csv);
+	fix_time_format_file($temp_csv);
+	fix_time_format_file($fans_csv);
+	fix_time_format_file($error_log);
+			
+	foreach my $coin (keys %coins){
+		fix_time_format_file($coins{$coin}{csv_log});
+	}
+}
+
+
+sub fix_time_format_file
+{
+	my ($file) = @_;
+
+	warn "Fixing $file...";
+	my @log;
+	if (open(LOG, $file)) {
+		@log = <LOG>;
+		close(LOG);
+
+		if (open(LOG, ">$file")){
+			foreach my $line (@log){ # 2018-02-12 06-18-40,
+				chomp($line);
+				$line =~ s/^(\d\d\d\d\-\d\d\-\d\d) (\d\d)\-(\d\d)\-(\d\d)(.+)$/$1 $2\:$3\:$4$5/;
+				print LOG $line . "\n";
+			}
+			close(LOG);
 		}
 	}
 }

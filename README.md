@@ -26,7 +26,7 @@ Depending on your mining software, we can collect information and send you alert
 # Install
 1. You will need to get "Notify My Android app" (http://www.notifymyandroid.com/) for Android and/or "Prowlapp" (https://www.prowlapp.com) for iOS, install it on your device, register with them and get an API key to get notifications.
 2. SSH into yout miner with user 'root' and password 'miner1324'
-3. Execute 'cd /root && git clone git://github.com/dacrypt/sm-monitor && chmod +x sm-monitor/sm-monitor.pl'
+3. Execute 'cd /root && git clone git://github.com/dacrypt/sm-monitor && chmod +x /root/sm-monitor/sm-monitor.pl'
 4. Run it '/root/sm-monitor/sm-monitor.pl'
 5. Place your Prowlapp and/or Notify My Android API key on the /mnt/user/config.txt (PROWL_API= an/or NMA_API=)
 
@@ -48,6 +48,8 @@ You can update it manually executing 'cd /root/sm-monitor/ && git pull origin ma
 - Script: /root/sm-monitor/sm-monitor.pl
 - Error log: /root/sm-monitor/error.log
 - Error csv: /root/sm-monitor/err.csv
+- Fans speed csv: /root/sm-monitor/fans.csv
+- Temperature csv: /root/sm-monitor/temperature.csv
 - Etherium csv: /root/sm-monitor/eth.csv
 - Decreed csv: /root/sm-monitor/dcr.csv
 - Sols csv: /root/sm-monitor/sol.csv
