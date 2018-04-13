@@ -1,5 +1,5 @@
-# sm-monitor
-A smarter way to mine. A monitoring and log collection script for simpleminingOS
+# sm-monitor: SimpleMining Monitor
+A monitoring and log collection script for simpleminingOS
 
 A perl script to monitor, log and notify via push notification events on mining rigs running SimpleMiningOS 
 
@@ -63,3 +63,73 @@ Find me on SimpleMiningOS chat as "dacrypt"
 
 Donations: 
 BTC: 1G2vX1X5yLTuaZZMLsdgvRn4nZxbK7aQPX
+
+
+---------------------------------------------------------------------------
+
+# sm-monitor: SimpleMining Monitor
+Un script de monitorización y recopilación de registros para simpleminingOS
+
+Utilidad escita en perl para monitorear, guardar registro y enviar notificaciones push a tu movil sobre los eventos ocurridos en rigs de minería que ejecutan SimpleMiningOS
+
+Este es un script perl diseñado para recopilar información de los registros de simpleminingOS y enviar notificaciones push a dispositivos iOS y Android a través de 'Prowlapp' y 'NotifyMyAndroid' con información relevante sobre los mineradores.
+
+He escrito este programa por necesidad de trabajar con simpleminingOS para enviar notificaciones automáticas a un teléfono móvil con información relevante del proceso de minería. Te enviará una alerta cuando se enciende un rig, cuántas tarjetas se detectaron, te alertará en caso de que la GPU se cuelgue, si una GPU no funciona bien y también recoge los valores de hash para cada GPU del rig en un archivo CSV que puede ser graficado en Excel por ejemplo. También mantiene un registro de errores con información relevante para un examen más detallado y también reinicia la máquina en caso de que se cuelgue la GPU.
+
+Cada notificación incluye el número de gpu con el problema y también muestra la cantidad de veces que hubo problemas con esa GPU en particular.
+
+Creará un archivo de registro en formato CSV con la cantidad de problemas por gpu para que puedas hacer gráficas en Excel, por ejemplo, y tengas una mejor visión de los problemas de tus gpu con el tiempo y puedas detectar problemas fácilmente.
+
+Hay otro archivo con errores en un format legible donde puedes rastrear problemas a lo largo del tiempo. (registro de errores)
+
+Finalmente, verás algunos archivos CSV adicionales con los hash rate de los mineradores. Para Sols, ETH y otra para DCR, los valores hash se almacenan de forma que se puede graficar y ver el rendimiento de cada GPU a lo largo del tiempo. Podrá visualizar el rendimiento en un gráfico en Excel si importa esos CSV.
+
+Dependiendo de tu software de minería, podemos recopilar información y enviarte alertas que recibes en tu teléfono inteligente como por ejemplo:
+- Cada vez que comienza la mineria
+- Cuando hay una acción rechazada
+- Si un gpu cuelga
+- Si un gpu no está funcionando bien
+- Baja temperatura de la GPU
+- Temperatura alta de GPU
+
+# Instalación
+1. Instala "Notify My Android" (http://www.notifymyandroid.com/) para Android y/o "Prowlapp" (https://www.prowlapp.com) para iOS. (Instalarlo en su dispositivo, regístrate con ellos y obten una clave API para recibir notificaciones)
+2. Ingresa por SSH en tu rig de mineración con usuario 'root' y contraseña 'miner1324' (Utiliza el cliente SSH putty y conectate usando la IP de tu rig)
+3. Ejecuta 'cd / root && git clone git: //github.com/dacrypt/sm-monitor && chmod + x /root/sm-monitor/sm-monitor.pl'
+4. Ejecuta '/root/sm-monitor/sm-monitor.pl'
+5. Coloca tu API de Prowlapp y/o de NotifyMyAndroid en /mnt/user/config.txt (PROWL_API = an / o NMA_API =)
+
+# Configuración
+El script se autoconfigurará y se ejecutará al inicio.
+
+# Actualización
+Se actualizará automáticamente desde el repositorio de git cada vez que se ejecute.
+Puedes actualizarlo manualmente ejecutando 'cd /root/sm-monitor && git pull origin master'
+
+# Registros de mineradores soportados
+- Claymore con ETH y / o DCR
+- dstm con Equihash (Sols)
+- ¿Necesitas uno nuevo? Házmelo saber
+
+# Archivos
+- Configuración de API: /mnt/user/config.txt
+- Directorio base: /root/sm-monitor/
+- Script: /root/sm-monitor/sm-monitor.pl
+- Registro de errores: /root/sm-monitor/error.log
+- Error csv: /root/sm-monitor/err.csv
+- Velocidad de Ventiladores en csv: /root/sm-monitor/fans.csv
+- Temperatura csv: /root/sm-monitor/temperature.csv
+- Etherium csv: /root/sm-monitor/eth.csv
+- Decreto csv: /root/sm-monitor/dcr.csv
+- Sols csv: /root/sm-monitor/sol.csv
+
+# Donaciones
+Estoy regalando esta pieza de software gratis bajo licencia de GNU. Si crees que tiene algún valor para ti, puedes donarme a la dirección de BTC en la parte inferior.
+
+Creo que ganarás más dinero al usar este script porque tu plataforma se reiniciará en caso de problemas y estarás más informado sobre los problemas con tu configuración. Espero que lo encuentres útil y espero que valores el tiempo y la forma de pensarlo.
+
+Encuéntrame en el chat de SimpleMiningOS como "dacrypt"
+
+Donaciones:
+BTC: 1G2vX1X5yLTuaZZMLsdgvRn4nZxbK7aQPX
+
