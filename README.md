@@ -66,7 +66,8 @@ BTC: 1G2vX1X5yLTuaZZMLsdgvRn4nZxbK7aQPX
 
 
 ---------------------------------------------------------------------------
-
+ESPAÑOL
+---------------------------------------------------------------------------
 # sm-monitor: SimpleMining Monitor
 Un script de monitorización y recopilación de registros para simpleminingOS
 
@@ -93,11 +94,11 @@ Dependiendo de tu software de minería, podemos recopilar información y enviart
 - Temperatura alta de GPU
 
 # Instalación
-1. Instala "Notify My Android" (http://www.notifymyandroid.com/) para Android y/o "Prowlapp" (https://www.prowlapp.com) para iOS. (Instalarlo en su dispositivo, regístrate con ellos y obten una clave API para recibir notificaciones)
-2. Ingresa por SSH en tu rig de mineración con usuario 'root' y contraseña 'miner1324' (Utiliza el cliente SSH putty y conectate usando la IP de tu rig)
-3. Ejecuta 'cd / root && git clone git: //github.com/dacrypt/sm-monitor && chmod + x /root/sm-monitor/sm-monitor.pl'
-4. Ejecuta '/root/sm-monitor/sm-monitor.pl'
-5. Coloca tu API de Prowlapp y/o de NotifyMyAndroid en /mnt/user/config.txt (PROWL_API = an / o NMA_API =)
+1. Instala "Notify My Android" (http://www.notifymyandroid.com/) para Android y/o "Prowlapp" (https://www.prowlapp.com) para iOS. (Instalalo en tu dispositivo, regístrate con ellos y obten una clave API para recibir notificaciones)
+2. Ingresa por SSH en tu rig de mineración con usuario 'root' y contraseña 'miner1324' (Utiliza un cliente SSH como 'putty' y conectate usando la IP de tu rig)
+3. Una vez conectado en el rig, Ejecuta 'cd /root && git clone git://github.com/dacrypt/sm-monitor && chmod +x /root/sm-monitor/sm-monitor.pl'
+4. Luego, ejecuta '/root/sm-monitor/sm-monitor.pl'
+5. Coloca tu API de Prowlapp y/o de NotifyMyAndroid en /mnt/user/config.txt (PROWL_API=  y/o NMA_API=)
 
 # Configuración
 El script se autoconfigurará y se ejecutará al inicio.
@@ -107,7 +108,7 @@ Se actualizará automáticamente desde el repositorio de git cada vez que se eje
 Puedes actualizarlo manualmente ejecutando 'cd /root/sm-monitor && git pull origin master'
 
 # Registros de mineradores soportados
-- Claymore con ETH y / o DCR
+- Claymore con ETH y/o DCR
 - dstm con Equihash (Sols)
 - ¿Necesitas uno nuevo? Házmelo saber
 
@@ -132,4 +133,3 @@ Encuéntrame en el chat de SimpleMiningOS como "dacrypt"
 
 Donaciones:
 BTC: 1G2vX1X5yLTuaZZMLsdgvRn4nZxbK7aQPX
-
